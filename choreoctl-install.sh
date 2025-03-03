@@ -65,6 +65,7 @@ main() {
     chmod +x ./choreoctl-completion
 
     local PROFILE=$(detect_profile)
+    echo "Detected profile: $PROFILE"
 
     if [ -z $PROFILE ]; then
         echo "No profile detected"
@@ -77,10 +78,8 @@ main() {
         if ! grep -qc "$CHOREO_DIR" "$PROFILE"; then
             echo "Adding choreoctl to PATH in $PROFILE"
             # Add to beginning of PATH to take precedence
-            sed -i.bak "1i\\
-export CHOREOCTL_DIR=$CHOREO_DIR\\
-export PATH=$CHOREO_DIR/bin:\${PATH}\\
-[ -f \$CHOREOCTL_DIR/bin/choreoctl-completion ] && source \$CHOREOCTL_DIR/bin/choreoctl-completion
+            sed -i.bak "\$a\\
+export PATH=$CHOREO_DIR/bin:\${PATH}
 " "$PROFILE"
             rm "${PROFILE}.bak"
         else
@@ -90,7 +89,12 @@ export PATH=$CHOREO_DIR/bin:\${PATH}\\
 
     # Add verification step
     echo "Verifying installation..."
-    source "$PROFILE" 2>/dev/null || true
+    cat choreoctl-completion
+    # source "$PROFILE" 2>/dev/null || true
+    if [ -f "$PROFILE" ]; then 
+        source "$PROFILE"; 
+    fi
+    echo "sourced the profile..."
     INSTALLED_PATH=$(which choreoctl)
     if [ "$INSTALLED_PATH" != "$CHOREO_CLI_EXEC" ]; then
         echo "Warning: choreoctl is pointing to $INSTALLED_PATH"
@@ -104,52 +108,54 @@ export PATH=$CHOREO_DIR/bin:\${PATH}\\
 
 detect_profile() {
     if [ "${PROFILE-}" = '/dev/null' ]; then
-        # the user has specifically requested NOT to touch their profile
         return
     fi
 
     if [ -n "${PROFILE}" ] && [ -f "${PROFILE}" ]; then
-        nvm_echo "${PROFILE}"
+        echo "${PROFILE}"
         return
     fi
 
     local DETECTED_PROFILE
     DETECTED_PROFILE=''
 
-
-    if [ "${SHELL#*bash}" != "$SHELL" ]; then
-        if [ -f "$HOME/.bashrc" ]; then
-            DETECTED_PROFILE="$HOME/.bashrc"
-        elif [ -f "$HOME/.bash_profile" ]; then
-            DETECTED_PROFILE="$HOME/.bash_profile"
-        fi
-    elif [ "${SHELL#*zsh}" != "$SHELL" ]; then
-        if [ -f "$HOME/.zshrc" ]; then
-            DETECTED_PROFILE="$HOME/.zshrc"
-        elif [ -f "$HOME/.zprofile" ]; then
-            DETECTED_PROFILE="$HOME/.zprofile"
-        fi
-    fi
+    case "$SHELL" in
+        *bash)
+            if [ -f "$HOME/.bashrc" ]; then
+                DETECTED_PROFILE="$HOME/.bashrc"
+            elif [ -f "$HOME/.bash_profile" ]; then
+                DETECTED_PROFILE="$HOME/.bash_profile"
+            fi
+            ;;
+        *zsh)
+            if [ -f "$HOME/.zshrc" ]; then
+                DETECTED_PROFILE="$HOME/.zshrc"
+            elif [ -f "$HOME/.zprofile" ]; then
+                DETECTED_PROFILE="$HOME/.zprofile"
+            fi
+            ;;
+        *ash)
+            if [ -f "$HOME/.profile" ]; then
+                DETECTED_PROFILE="$HOME/.profile"
+            elif [ -f "/etc/profile" ]; then
+                DETECTED_PROFILE="/etc/profile"
+            fi
+            ;;
+    esac
 
     if [ -z "$DETECTED_PROFILE" ]; then
-        if [ -f "$HOME/.profile" ]; then
-            DETECTED_PROFILE="$HOME/.profile"
-        elif [ -f "$HOME/.bashrc" ]; then
-            DETECTED_PROFILE="$HOME/.bashrc"
-        elif [ -f "$HOME/.bash_profile" ]; then
-            DETECTED_PROFILE="$HOME/.bash_profile"
-        elif [ -f "$HOME/.zshrc" ]; then
-            DETECTED_PROFILE="$HOME/.zshrc"
-        elif [ -f "$HOME/.zprofile" ]; then
-            DETECTED_PROFILE="$HOME/.zprofile"
-        fi
+        for file in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.zprofile" "/etc/profile"; do
+            if [ -f "$file" ]; then
+                DETECTED_PROFILE="$file"
+                break
+            fi
+        done
     fi
 
-    if [ ! -z "$DETECTED_PROFILE" ]; then
+    if [ -n "$DETECTED_PROFILE" ]; then
         echo "$DETECTED_PROFILE"
     fi
 }
-
 
 main "$@"
 unset -f main detect_profile getArchitecture downloadRelease
